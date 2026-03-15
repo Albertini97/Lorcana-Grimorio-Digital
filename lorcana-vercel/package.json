@@ -1,0 +1,13 @@
+{
+  "name": "lorcana-companion",
+  "version": "1.0.0",
+  "description": "Lorcana TCG Companion App — Grimorio Digital",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
