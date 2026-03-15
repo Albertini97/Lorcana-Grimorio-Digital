@@ -489,55 +489,72 @@ body::before{
 
   <!-- ═══════ SCANNER VIEW ═══════ -->
   <section id="tab-scanner" class="view">
-    <div class="view-inner scanner-wrap" style="padding:14px">
+    <div class="view-inner" style="padding:14px;gap:16px">
 
-      <div class="cam-frame" id="cam-frame" onclick="tapToFocus(event)" style="cursor:crosshair">
-        <video id="camera-video" autoplay playsinline muted></video>
-        <canvas id="canvas-el"></canvas>
-        <div class="cam-corners"></div>
-        <div class="cam-corner-tr"></div>
-        <div class="cam-corner-bl"></div>
-        <div class="scan-line" id="scan-line" style="display:none"></div>
-        <div class="cam-hint" id="cam-hint">Toca la pantalla para enfocar</div>
-        <div id="focus-ring" style="display:none;position:absolute;width:60px;height:60px;border:2px solid var(--gold);border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);"></div>
-        <div class="analyze-overlay" id="analyze-overlay" style="display:none">
-          <div class="spinner"></div>
-          <div class="analyze-txt">ANALIZANDO CARTA...</div>
+      <!-- Preview de la imagen capturada -->
+      <div id="preview-wrap" style="display:none;width:100%;border-radius:14px;overflow:hidden;border:2px solid var(--gold-d);position:relative;">
+        <img id="preview-img" style="width:100%;display:block;max-height:340px;object-fit:contain;background:#000">
+        <button onclick="resetScanner()" style="position:absolute;top:8px;right:8px;background:rgba(13,10,22,0.85);border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;">✕ Nueva</button>
+      </div>
+
+      <!-- Estado inicial — botones de captura -->
+      <div id="capture-btns">
+        <!-- Botón principal: abre cámara nativa -->
+        <input type="file" id="file-cam" accept="image/*" capture="environment" onchange="handleCapture(this)" style="display:none">
+        <button onclick="document.getElementById('file-cam').click()" style="
+          width:100%;padding:22px;border-radius:14px;
+          border:2px solid var(--gold);background:rgba(201,168,76,0.08);
+          color:var(--gold);font-family:Cinzel,serif;font-size:17px;
+          letter-spacing:2px;cursor:pointer;transition:all .2s;
+          display:flex;flex-direction:column;align-items:center;gap:8px;
+        " onmouseover="this.style.background='rgba(201,168,76,0.18)'" onmouseout="this.style.background='rgba(201,168,76,0.08)'">
+          <span style="font-size:48px">📷</span>
+          FOTOGRAFIAR CARTA
+          <span style="font-size:12px;color:var(--text3);font-family:Crimson Pro,serif;letter-spacing:1px;text-transform:none">Abre la cámara del móvil</span>
+        </button>
+
+        <div style="display:flex;align-items:center;gap:10px;margin:4px 0;">
+          <div style="flex:1;height:1px;background:var(--border)"></div>
+          <span style="font-size:12px;color:var(--text3)">o</span>
+          <div style="flex:1;height:1px;background:var(--border)"></div>
         </div>
+
+        <!-- Botón secundario: galería -->
+        <input type="file" id="file-gallery" accept="image/*" onchange="handleCapture(this)" style="display:none">
+        <button onclick="document.getElementById('file-gallery').click()" style="
+          width:100%;padding:14px;border-radius:12px;
+          border:1px solid var(--border);background:rgba(255,255,255,0.03);
+          color:var(--text2);font-family:Cinzel,serif;font-size:13px;
+          letter-spacing:1px;cursor:pointer;transition:all .2s;
+          display:flex;align-items:center;justify-content:center;gap:10px;
+        " onmouseover="this.style.borderColor='var(--gold-d)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text2)'">
+          🖼 ELEGIR DE GALERÍA
+        </button>
       </div>
 
-      <div class="cam-controls">
-        <button class="btn-cam" onclick="startCamera()" id="btn-cam-start">📷 Activar</button>
-        <button class="btn-capture" id="btn-capture" onclick="captureAndAnalyze()" title="Capturar"></button>
-        <button class="btn-cam" id="btn-torch" onclick="toggleTorch()" style="display:none">🔦</button>
-        <button class="btn-cam" onclick="stopCamera()">■ Stop</button>
+      <!-- Analizando overlay (fuera del frame) -->
+      <div id="analyze-status" style="display:none;flex-direction:column;align-items:center;gap:12px;padding:24px;">
+        <div class="spinner"></div>
+        <div style="font-family:Cinzel,serif;color:var(--gold);font-size:13px;letter-spacing:2px;">ANALIZANDO CARTA...</div>
+        <div style="font-size:12px;color:var(--text3)">Gemini está identificando la carta</div>
       </div>
 
-      <div id="cam-selector-row" style="display:none;gap:8px;align-items:center;">
-        <span style="font-size:11px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;white-space:nowrap">Cámara:</span>
-        <select class="select-styled" id="cam-select" onchange="switchCamera(this.value)" style="flex:1;font-size:12px;padding:6px 8px;"></select>
-      </div>
-
-      <!-- Upload alternative -->
-      <div class="upload-area" onclick="document.getElementById('file-input').click()">
-        <input type="file" id="file-input" accept="image/*" capture="environment" onchange="analyzeFile(this)">
-        <div class="upload-icon">🖼</div>
-        <div class="upload-txt">Subir imagen de carta</div>
-        <div class="upload-sub">O usa la galería / tomar foto</div>
-      </div>
-
+      <!-- Resultado -->
       <div class="scan-card-result" id="scan-result" style="display:none">
         <div class="scan-res-title"><span class="pulse-dot"></span> Resultado del análisis</div>
         <div id="scan-result-inner"></div>
       </div>
 
+      <!-- Tips -->
       <div class="cam-tip">
-        <strong>Consejos para mejor enfoque:</strong><br>
-        • <strong>Toca la carta</strong> en pantalla para enfocar<br>
-        • Mantén el móvil a <strong>15-20 cm</strong> de la carta<br>
-        • Buena iluminación, sin reflejos<br>
-        • Usa el boton 🔦 si hay poca luz
+        <strong>Para mejores resultados:</strong><br>
+        • Coloca la carta sobre una superficie plana<br>
+        • Buena iluminación, sin reflejos en el plástico<br>
+        • Encuadra solo la carta, sin otras cartas alrededor<br>
+        • Cuanto más nítida la foto, mejor la detección
       </div>
+
+      <canvas id="canvas-el" style="display:none"></canvas>
     </div>
   </section>
 
@@ -1222,141 +1239,58 @@ function exportDeck(){
 // ═══════════════════════════════
 // CAMERA SCANNER
 // ═══════════════════════════════
-let torchOn = false;
-let currentDeviceId = null;
+function handleCapture(input){
+  const file = input.files[0];
+  if(!file) return;
 
-async function startCamera(deviceId){
-  try{
-    if(cameraStream){ cameraStream.getTracks().forEach(t=>t.stop()); }
-    const constraints = {
-      video:{
-        deviceId: deviceId ? {exact:deviceId} : undefined,
-        facingMode: deviceId ? undefined : {ideal:'environment'},
-        width:{ideal:1920}, height:{ideal:1080},
-        focusMode:{ideal:['continuous','auto']},
-        advanced:[{focusMode:'continuous'},{focusMode:'auto'}]
-      }
-    };
-    cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-    const v = document.getElementById('camera-video');
-    v.srcObject = cameraStream;
-
-    // Try to apply continuous autofocus
-    const track = cameraStream.getVideoTracks()[0];
-    if(track){
-      currentDeviceId = track.getSettings().deviceId;
-      const caps = track.getCapabilities ? track.getCapabilities() : {};
-      if(caps.focusMode && caps.focusMode.includes('continuous')){
-        await track.applyConstraints({advanced:[{focusMode:'continuous'}]});
-      }
-      // Show torch button if supported
-      if(caps.torch){
-        document.getElementById('btn-torch').style.display='block';
-      }
-    }
-
-    // Populate camera selector
-    await populateCameraList();
-
-    document.getElementById('scan-line').style.display='block';
-    document.getElementById('cam-hint').textContent='Toca la carta para enfocar';
-    document.getElementById('btn-cam-start').textContent='📷 Activa';
-  }catch(e){
-    toast('No se pudo acceder a la cámara: ' + e.message);
-  }
+  // Show preview
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('preview-img').src = e.target.result;
+    document.getElementById('preview-wrap').style.display = 'block';
+    document.getElementById('capture-btns').style.display = 'none';
+    document.getElementById('scan-result').style.display = 'none';
+    // Auto-analyze
+    analyzeFromFile(file);
+  };
+  reader.readAsDataURL(file);
+  // Reset input so same file can be selected again
+  input.value = '';
 }
 
-async function populateCameraList(){
-  try{
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const cams = devices.filter(d=>d.kind==='videoinput');
-    if(cams.length > 1){
-      const sel = document.getElementById('cam-select');
-      sel.innerHTML = cams.map((d,i)=>`<option value="${d.deviceId}"${d.deviceId===currentDeviceId?' selected':''}>${d.label||'Cámara '+(i+1)}</option>`).join('');
-      document.getElementById('cam-selector-row').style.display='flex';
-    }
-  }catch(e){}
+function resetScanner(){
+  document.getElementById('preview-wrap').style.display = 'none';
+  document.getElementById('capture-btns').style.display = 'block';
+  document.getElementById('scan-result').style.display = 'none';
+  document.getElementById('analyze-status').style.display = 'none';
 }
 
-async function switchCamera(deviceId){
-  await startCamera(deviceId);
-}
+async function analyzeFromFile(file){
+  document.getElementById('analyze-status').style.display = 'flex';
+  document.getElementById('scan-result').style.display = 'none';
 
-async function tapToFocus(e){
-  if(!cameraStream) return;
-  const track = cameraStream.getVideoTracks()[0];
-  if(!track) return;
-  const frame = document.getElementById('cam-frame');
-  const rect = frame.getBoundingClientRect();
-  const x = (e.clientX - rect.left) / rect.width;
-  const y = (e.clientY - rect.top) / rect.height;
-
-  // Show focus ring
-  const ring = document.getElementById('focus-ring');
-  ring.style.left = (x*100)+'%';
-  ring.style.top = (y*100)+'%';
-  ring.style.display='block';
-  ring.style.opacity='1';
-  setTimeout(()=>{ ring.style.opacity='0'; setTimeout(()=>ring.style.display='none',300); }, 800);
-
-  // Apply point of interest focus if supported
-  const caps = track.getCapabilities ? track.getCapabilities() : {};
-  if(caps.pointsOfInterest || caps.focusMode){
-    try{
-      const adv = [];
-      if(caps.pointsOfInterest) adv.push({pointsOfInterest:[{x,y}],focusMode:'manual'});
-      else if(caps.focusMode?.includes('single-shot')) adv.push({focusMode:'single-shot'});
-      if(adv.length) await track.applyConstraints({advanced:adv});
-      // Return to continuous after 2s
-      setTimeout(async()=>{
-        if(caps.focusMode?.includes('continuous'))
-          await track.applyConstraints({advanced:[{focusMode:'continuous'}]}).catch(()=>{});
-      }, 2000);
-    }catch(err){}
-  }
-}
-
-async function toggleTorch(){
-  if(!cameraStream) return;
-  const track = cameraStream.getVideoTracks()[0];
-  if(!track) return;
-  try{
-    torchOn = !torchOn;
-    await track.applyConstraints({advanced:[{torch:torchOn}]});
-    document.getElementById('btn-torch').textContent = torchOn ? '🔦✓' : '🔦';
-  }catch(e){ toast('Linterna no disponible'); }
-}
-
-function stopCamera(){
-  if(cameraStream){ cameraStream.getTracks().forEach(t=>t.stop()); cameraStream=null; }
-  torchOn=false;
-  const v = document.getElementById('camera-video');
-  v.srcObject=null;
-  document.getElementById('scan-line').style.display='none';
-  document.getElementById('btn-cam-start').textContent='📷 Activar';
-  document.getElementById('btn-torch').style.display='none';
-  document.getElementById('cam-selector-row').style.display='none';
-}
-
-async function captureAndAnalyze(){
-  const v = document.getElementById('camera-video');
-  if(!cameraStream||!v.srcObject){ toast('Activa la cámara primero'); return; }
+  // Resize image to max 1600px for faster upload keeping quality
+  const bitmap = await createImageBitmap(file);
   const canvas = document.getElementById('canvas-el');
-  canvas.width = v.videoWidth; canvas.height = v.videoHeight;
-  canvas.getContext('2d').drawImage(v,0,0);
-  const b64 = canvas.toDataURL('image/jpeg',0.85).split(',')[1];
+  const MAX = 1600;
+  let w = bitmap.width, h = bitmap.height;
+  if(w > MAX || h > MAX){
+    const scale = Math.min(MAX/w, MAX/h);
+    w = Math.round(w*scale); h = Math.round(h*scale);
+  }
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+  const b64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
+
+  document.getElementById('analyze-status').style.display = 'none';
   await analyzeImage(b64);
 }
+
 
 async function analyzeFile(input){
   const file = input.files[0];
   if(!file) return;
-  const reader = new FileReader();
-  reader.onload = async e => {
-    const b64 = e.target.result.split(',')[1];
-    await analyzeImage(b64);
-  };
-  reader.readAsDataURL(file);
+  await analyzeFromFile(file);
 }
 
 async function analyzeImage(b64){
