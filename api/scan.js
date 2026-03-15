@@ -57,7 +57,7 @@ Si no ves ninguna carta de Lorcana devuelve exactamente: {"found":false,"message
 Responde ÚNICAMENTE con el JSON, nada más.`;
 
   const geminiRes = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
