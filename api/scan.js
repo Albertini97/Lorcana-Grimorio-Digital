@@ -18,11 +18,11 @@ export default async function handler(req) {
     });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GOOGLE_API_KEY;
   if (!apiKey) {
     return new Response(JSON.stringify({ error: 'API key not configured' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     });
   }
 
@@ -32,7 +32,7 @@ export default async function handler(req) {
   } catch {
     return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
       status: 400,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     });
   }
 
@@ -40,58 +40,63 @@ export default async function handler(req) {
   if (!imageBase64) {
     return new Response(JSON.stringify({ error: 'Missing imageBase64' }), {
       status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  // Basic size guard — base64 of 4MB image ~= 5.5MB string
-  if (imageBase64.length > 6_000_000) {
-    return new Response(JSON.stringify({ error: 'Image too large (max ~4MB)' }), {
-      status: 413,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
-      system: `Eres un experto en Disney Lorcana TCG. Al recibir imagen de una carta, identifícala y devuelve SOLO JSON (sin markdown, sin texto extra):
-{"found":true,"name":"string","subtitle":"string|null","cost":number,"color":"Amber|Amethyst|Emerald|Ruby|Sapphire|Steel","type":"Character|Action|Item|Location","strength":number|null,"willpower":number|null,"lore":number|null,"rarity":"Common|Uncommon|Rare|Super Rare|Legendary|Enchanted","inkwell":boolean,"set":"string","set_num":"string","abilities":[{"name":"string","text":"string"}],"flavor_text":"string|null","confidence":"high|medium|low"}
-Si no hay carta: {"found":false,"message":"string"}`,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: mediaType, data: imageBase64 },
-            },
-            { type: 'text', text: 'Identifica esta carta de Lorcana.' },
-          ],
-        },
-      ],
-    }),
-  });
-
-  const data = await anthropicRes.json();
-
-  if (!anthropicRes.ok) {
-    return new Response(JSON.stringify({ error: data?.error?.message || 'Anthropic API error' }), {
-      status: anthropicRes.status,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
     });
   }
 
-  const text = (data.content || []).map(b => b.text || '').join('').replace(/```json?|```/g, '').trim();
+  if (imageBase64.length > 6_000_000) {
+    return new Response(JSON.stringify({ error: 'Image too large (max ~4MB)' }), {
+      status: 413,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    });
+  }
 
-  return new Response(JSON.stringify({ result: text }), {
+  const prompt = `Eres un experto en Disney Lorcana TCG. Analiza esta imagen de una carta y devuelve SOLO JSON válido (sin markdown, sin texto extra, sin bloques de código):
+{"found":true,"name":"string","subtitle":"string o null","cost":number,"color":"Amber o Amethyst o Emerald o Ruby o Sapphire o Steel","type":"Character o Action o Item o Location","strength":number o null,"willpower":number o null,"lore":number o null,"rarity":"Common o Uncommon o Rare o Super Rare o Legendary o Enchanted","inkwell":true o false,"set":"string","set_num":"string","abilities":[{"name":"string","text":"string"}],"flavor_text":"string o null","confidence":"high o medium o low"}
+Si no ves ninguna carta de Lorcana devuelve exactamente: {"found":false,"message":"No se detectó ninguna carta de Lorcana"}
+Responde ÚNICAMENTE con el JSON, nada más.`;
+
+  const geminiRes = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                inline_data: {
+                  mime_type: mediaType,
+                  data: imageBase64,
+                },
+              },
+              { text: prompt },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 1000,
+        },
+      }),
+    }
+  );
+
+  const data = await geminiRes.json();
+
+  if (!geminiRes.ok) {
+    const errMsg = data?.error?.message || 'Gemini API error';
+    return new Response(JSON.stringify({ error: errMsg }), {
+      status: geminiRes.status,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    });
+  }
+
+  const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const clean = raw.replace(/```json?|```/g, '').trim();
+
+  return new Response(JSON.stringify({ result: clean }), {
     status: 200,
     headers: {
       'Content-Type': 'application/json',
