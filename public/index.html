@@ -1309,13 +1309,41 @@ async function analyzeImage(b64){
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Error del servidor');
-    const txt = (data.result || '').replace(/```json?|```/g, '').trim();
+    // If server couldn't parse, show raw for debugging
+    if (data.error === 'parse_failed') {
+      showScanResult('<b>La IA respondió pero el formato no es válido.</b><br><br>Respuesta raw:<br>' + esc((data.raw||'').slice(0,400)), false);
+      return;
+    }
+    const txt = (data.result || '').trim();
 
     if(overlay) overlay.style.display='none';
     if(status)  status.style.display='none';
 
     try{
-      const r = JSON.parse(txt);
+      // Extract and sanitize JSON from response
+      let jsonStr = txt;
+      // Extract the JSON object
+      const jsonMatch = txt.match(/\{[\s\S]*\}/);
+      if(jsonMatch) jsonStr = jsonMatch[0];
+      // Fix smart/curly quotes that Gemini sometimes outputs
+      jsonStr = jsonStr
+        .replace(/[‘’]/g, "'")   // curly single quotes
+        .replace(/[“”]/g, '"')   // curly double quotes
+        .replace(/[–—]/g, '-')   // em/en dashes
+        .replace(/
+/g, '\n')           // literal newlines inside strings
+        .replace(/
+/g, '\n');
+
+      // Safe parse with fallback
+      let r;
+      try {
+        r = JSON.parse(jsonStr);
+      } catch(e1) {
+        // Last resort: try to eval-parse loosely
+        const safeJson = jsonStr.replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2":');
+        r = JSON.parse(safeJson);
+      }
       if(!r.found){ showScanResult(`⚠ ${r.message||'No se detectó carta'}`, false); return; }
 
       const ink = r.color||'';
@@ -1358,7 +1386,13 @@ async function analyzeImage(b64){
 
       showScanResult(html, true);
     }catch(pe){
-      showScanResult('Error al analizar. Asegúrate de que la carta esté bien iluminada.<br><small style="opacity:.5">'+esc(txt.slice(0,200))+'</small>', false);
+      // Show full raw response so we can debug
+      showScanResult(
+        '<b style="color:var(--gold)">Respuesta de la IA:</b><br><br>' +
+        esc(txt.slice(0, 500)) +
+        '<br><br><small style="opacity:.6">Si ves JSON aquí pero no se muestra la carta, es un bug de parseo. Cópialo y díselo al desarrollador.</small>',
+        false
+      );
     }
   }catch(err){
     const ov = document.getElementById('analyze-overlay');
@@ -1371,8 +1405,11 @@ async function analyzeImage(b64){
 
 function showScanResult(html, isCard){
   const el = document.getElementById('scan-result-inner');
-  el.innerHTML = isCard ? html : `<div style="color:var(--text3);font-size:13px">${html}</div>`;
-  document.getElementById('scan-result').style.display='block';
+  el.innerHTML = isCard ? html : `<div style="color:var(--text2);font-size:13px;line-height:1.7">${html}</div>`;
+  const box = document.getElementById('scan-result');
+  box.style.display='block';
+  // scroll into view
+  setTimeout(()=> box.scrollIntoView({behavior:'smooth', block:'start'}), 100);
 }
 
 // ═══════════════════════════════
