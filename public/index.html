@@ -793,17 +793,24 @@ loadStorage();
 // API FETCH — multi-source
 // ═══════════════════════════════
 async function loadCards(){
+  // Show demo cards immediately so app is usable right away
+  useFallback();
+
+  // Then try to load real cards in background
   const cached = sessionStorage.getItem('lorcana_cards_cache');
   if(cached){
     try{
-      allCards = JSON.parse(cached);
-      filteredCards = [...allCards];
-      renderCards(true);
-      return;
+      const parsed = JSON.parse(cached);
+      if(parsed.length > 10){
+        allCards = parsed;
+        filteredCards = [...allCards];
+        renderCards(true);
+        document.getElementById('cards-loading').style.display='none';
+        return;
+      }
     }catch(e){}
   }
 
-  // Try primary API
   const apis = [
     'https://api.lorcana-api.com/cards/all',
     'https://lorcanajson.org/files/en/allCards.json'
@@ -811,21 +818,22 @@ async function loadCards(){
 
   for(const url of apis){
     try{
-      const res = await fetch(url, {signal: AbortSignal.timeout(8000)});
+      const res = await fetch(url, {signal: AbortSignal.timeout(6000)});
       if(!res.ok) continue;
       const data = await res.json();
-      allCards = Array.isArray(data) ? data : (data.cards||data.data||[]);
-      if(allCards.length > 10){
-        // normalize fields
-        allCards = allCards.map(normalizeCard);
+      const cards = Array.isArray(data) ? data : (data.cards||data.data||[]);
+      if(cards.length > 10){
+        allCards = cards.map(normalizeCard);
         filteredCards = [...allCards];
         try{ sessionStorage.setItem('lorcana_cards_cache', JSON.stringify(allCards)); }catch(e){}
         renderCards(true);
+        toast('✓ Catálogo completo cargado — ' + allCards.length + ' cartas');
         return;
       }
     }catch(e){}
   }
-  useFallback();
+  // APIs failed — stay with demo cards, already loaded
+  toast('API no disponible — mostrando cartas de demo');
 }
 
 function normalizeCard(c){
