@@ -1335,13 +1335,10 @@ async function analyzeImage(b64){
       if(jsonMatch) jsonStr = jsonMatch[0];
       // Fix smart/curly quotes that Gemini sometimes outputs
       jsonStr = jsonStr
-        .replace(/[‘’]/g, "'")   // curly single quotes
-        .replace(/[“”]/g, '"')   // curly double quotes
-        .replace(/[–—]/g, '-')   // em/en dashes
-        .replace(/
-/g, '\n')           // literal newlines inside strings
-        .replace(/
-/g, '\n');
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/[\u201C\u201D]/g, '"')
+        .replace(/[\u2013\u2014]/g, '-')
+        .replace(/[\x00-\x09\x0B\x0C\x0E-\x1F]/g, ' ');
 
       // Safe parse with fallback
       let r;
