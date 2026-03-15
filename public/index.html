@@ -793,48 +793,90 @@ loadStorage();
 // API FETCH — multi-source
 // ═══════════════════════════════
 async function loadCards(){
-  // Show demo cards immediately so app is usable right away
   useFallback();
 
-  // Then try to load real cards in background
-  const cached = sessionStorage.getItem('lorcana_cards_cache');
+  const cached = sessionStorage.getItem('lcj_cache');
   if(cached){
     try{
       const parsed = JSON.parse(cached);
-      if(parsed.length > 10){
-        allCards = parsed;
-        filteredCards = [...allCards];
-        renderCards(true);
-        document.getElementById('cards-loading').style.display='none';
-        return;
-      }
+      if(parsed.length > 10){ allCards=parsed; filteredCards=[...allCards]; renderCards(true); return; }
     }catch(e){}
   }
 
-  const apis = [
-    'https://api.lorcana-api.com/cards/all',
-    'https://lorcanajson.org/files/en/allCards.json'
-  ];
-
-  for(const url of apis){
-    try{
-      const res = await fetch(url, {signal: AbortSignal.timeout(6000)});
-      if(!res.ok) continue;
+  // LorcanaJSON — primary source (most complete)
+  try{
+    const res = await fetch('https://lorcanajson.org/files/en/allCards.json', {signal:AbortSignal.timeout(15000)});
+    if(res.ok){
       const data = await res.json();
-      const cards = Array.isArray(data) ? data : (data.cards||data.data||[]);
+      let cards = [];
+      if(Array.isArray(data)) cards = data;
+      else if(data.cards && Array.isArray(data.cards)) cards = data.cards;
+      else Object.values(data).forEach(v=>{ if(Array.isArray(v)) cards.push(...v); else if(v&&Array.isArray(v.cards)) cards.push(...v.cards); });
+      if(cards.length > 10){
+        allCards = cards.map(normalizeLJCard);
+        filteredCards = [...allCards];
+        try{ sessionStorage.setItem('lcj_cache', JSON.stringify(allCards)); }catch(e){}
+        renderCards(true);
+        toast('Catálogo cargado: ' + allCards.length + ' cartas');
+        return;
+      }
+    }
+  }catch(e){ console.log('LorcanaJSON error:', e); }
+
+  // Fallback
+  try{
+    const res = await fetch('https://api.lorcana-api.com/cards/all', {signal:AbortSignal.timeout(8000)});
+    if(res.ok){
+      const data = await res.json();
+      const cards = Array.isArray(data) ? data : [];
       if(cards.length > 10){
         allCards = cards.map(normalizeCard);
         filteredCards = [...allCards];
-        try{ sessionStorage.setItem('lorcana_cards_cache', JSON.stringify(allCards)); }catch(e){}
+        try{ sessionStorage.setItem('lcj_cache', JSON.stringify(allCards)); }catch(e){}
         renderCards(true);
-        toast('✓ Catálogo completo cargado — ' + allCards.length + ' cartas');
+        toast('Catalogo cargado: ' + allCards.length + ' cartas');
         return;
       }
-    }catch(e){}
-  }
-  // APIs failed — stay with demo cards, already loaded
+    }
+  }catch(e){}
+
   toast('API no disponible - modo demo');
 }
+
+function normalizeLJCard(c){
+  const abilities = [];
+  if(Array.isArray(c.abilities)){
+    c.abilities.forEach(ab=>{
+      const txt = ab.fullText||ab.effect||ab.text||ab.reminderText||'';
+      if(txt||ab.name) abilities.push({name:ab.name||ab.type||'',text:txt});
+    });
+  }
+  if(Array.isArray(c.keywordAbilities)){
+    c.keywordAbilities.forEach(kw=>{
+      if(typeof kw==='string') abilities.push({name:kw,text:''});
+      else if(kw&&kw.name) abilities.push({name:kw.name,text:kw.reminderText||''});
+    });
+  }
+  return {
+    id: String(c.id||c.culture_invariant_id||Math.random()),
+    name: c.name||'',
+    subtitle: c.subtitle||c.version||null,
+    cost: c.cost??null,
+    color: c.color||c.ink||'',
+    type: c.type||'',
+    strength: c.strength??null,
+    willpower: c.willpower??null,
+    lore: c.lore??null,
+    rarity: c.rarity||'',
+    inkwell: c.inkwell??c.inkable??false,
+    set: c.setName||c.set_name||(c.setCode?'Set '+c.setCode:'')||'',
+    set_num: c.number?String(c.number):'',
+    abilities,
+    flavor_text: c.flavorText||c.flavor_text||null,
+    images:{ full: c.images?.full||c.images?.large||c.image||'' }
+  };
+}
+
 
 function normalizeCard(c){
   return {
