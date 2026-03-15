@@ -1385,11 +1385,25 @@ async function analyzeImage(b64){
 
       if(r.flavor_text) html+=`<div style="font-style:italic;font-size:12px;color:var(--text3);border-top:1px solid var(--border);padding-top:9px;margin-top:9px;line-height:1.6">"${esc(r.flavor_text)}"</div>`;
 
-      if(match){
-        html+=`<button onclick="openCard('${escId(match.id)}')" style="width:100%;margin-top:12px;padding:10px;background:rgba(201,168,76,0.12);border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:Cinzel,serif;font-size:12px;letter-spacing:1px;cursor:pointer;transition:background .2s" onmouseover="this.style.background='rgba(201,168,76,0.22)'" onmouseout="this.style.background='rgba(201,168,76,0.12)'">VER EN CATÁLOGO →</button>`;
-      }
+      // Find all cards that match by name (could be multiple versions)
+      const matches = allCards.filter(c => c.name?.toLowerCase() === r.name?.toLowerCase());
 
-      showScanResult(html, true);
+      if(matches.length === 1){
+        // Single match — show card directly and open modal
+        html += buildMatchButtons(matches);
+        showScanResult(html, true);
+        setTimeout(() => openCard(matches[0].id), 300);
+      } else if(matches.length > 1){
+        // Multiple versions — show selector
+        html += buildMatchButtons(matches);
+        showScanResult(html, true);
+      } else {
+        // No match in catalog — still show scanned data
+        html += `<div style="font-size:12px;color:var(--text3);margin-top:12px;padding:10px;border:1px dashed var(--border);border-radius:8px;text-align:center">
+          Carta detectada pero no encontrada en el catálogo local
+        </div>`;
+        showScanResult(html, true);
+      }
     }catch(pe){
       // Show full raw response so we can debug
       showScanResult(
@@ -1406,6 +1420,50 @@ async function analyzeImage(b64){
     if(st) st.style.display='none';
     showScanResult('Error de conexión: '+esc(err.message), false);
   }
+}
+
+function buildMatchButtons(matches){
+  if(!matches.length) return '';
+  if(matches.length === 1){
+    const c = matches[0];
+    const ink = c.color || '';
+    const ic = INKS[ink] || {};
+    const img = c.images?.full || '';
+    return `
+      <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+        <div style="font-size:10px;color:var(--text3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">Encontrada en el catálogo</div>
+        <div onclick="openCard('${escId(c.id)}')" style="display:flex;align-items:center;gap:12px;background:rgba(201,168,76,0.08);border:1px solid var(--gold-d);border-radius:10px;padding:10px;cursor:pointer;transition:background .2s" onmouseover="this.style.background='rgba(201,168,76,0.18)'" onmouseout="this.style.background='rgba(201,168,76,0.08)'">
+          ${img ? `<img src="${img}" style="width:44px;aspect-ratio:3/4;border-radius:5px;object-fit:cover;border:1px solid var(--border2)" onerror="this.style.display='none'">` : `<div style="width:44px;aspect-ratio:3/4;border-radius:5px;background:var(--ink3);display:flex;align-items:center;justify-content:center;font-size:18px">${INK_EMOJI[ink]||'✨'}</div>`}
+          <div style="flex:1;min-width:0">
+            <div style="font-family:Cinzel,serif;font-size:13px;color:var(--gold);margin-bottom:2px">${esc(c.name)}</div>
+            ${c.subtitle ? `<div style="font-size:11px;color:var(--text3);font-style:italic">${esc(c.subtitle)}</div>` : ''}
+            <div style="font-size:11px;color:var(--text2);margin-top:3px">${c.set||''}</div>
+          </div>
+          <div style="color:var(--gold);font-size:18px">›</div>
+        </div>
+      </div>`;
+  }
+  // Multiple versions
+  return `
+    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+      <div style="font-size:10px;color:var(--text3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">${matches.length} versiones encontradas — selecciona una</div>
+      <div style="display:flex;flex-direction:column;gap:7px">
+        ${matches.map(c => {
+          const ink = c.color || '';
+          const ic = INKS[ink] || {};
+          const img = c.images?.full || '';
+          return `<div onclick="openCard('${escId(c.id)}')" style="display:flex;align-items:center;gap:12px;background:rgba(201,168,76,0.05);border:1px solid var(--border);border-radius:10px;padding:10px;cursor:pointer;transition:all .2s" onmouseover="this.style.background='rgba(201,168,76,0.15)';this.style.borderColor='var(--gold-d)'" onmouseout="this.style.background='rgba(201,168,76,0.05)';this.style.borderColor='var(--border)'">
+            ${img ? `<img src="${img}" style="width:40px;aspect-ratio:3/4;border-radius:5px;object-fit:cover;border:1px solid var(--border2)" onerror="this.style.display='none'">` : `<div style="width:40px;aspect-ratio:3/4;border-radius:5px;background:var(--ink3);display:flex;align-items:center;justify-content:center;font-size:16px">${INK_EMOJI[ink]||'✨'}</div>`}
+            <div style="flex:1;min-width:0">
+              <div style="font-family:Cinzel,serif;font-size:12px;color:var(--gold)">${esc(c.name)}</div>
+              ${c.subtitle ? `<div style="font-size:10px;color:var(--text3);font-style:italic">${esc(c.subtitle)}</div>` : ''}
+              <div style="font-size:10px;color:var(--text2);margin-top:2px">${c.set||''} ${c.set_num ? '#'+c.set_num : ''}</div>
+            </div>
+            <div style="color:var(--text3);font-size:16px">›</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
 }
 
 function showScanResult(html, isCard){
