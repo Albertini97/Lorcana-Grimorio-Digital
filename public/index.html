@@ -1294,7 +1294,11 @@ async function analyzeFile(input){
 }
 
 async function analyzeImage(b64){
-  document.getElementById('analyze-overlay').style.display='flex';
+  // show loading — works for both old overlay and new status div
+  const overlay = document.getElementById('analyze-overlay');
+  const status  = document.getElementById('analyze-status');
+  if(overlay) overlay.style.display='flex';
+  if(status)  status.style.display='flex';
   document.getElementById('scan-result').style.display='none';
 
   try{
@@ -1307,7 +1311,8 @@ async function analyzeImage(b64){
     if (!res.ok) throw new Error(data.error || 'Error del servidor');
     const txt = (data.result || '').replace(/```json?|```/g, '').trim();
 
-    document.getElementById('analyze-overlay').style.display='none';
+    if(overlay) overlay.style.display='none';
+    if(status)  status.style.display='none';
 
     try{
       const r = JSON.parse(txt);
@@ -1356,7 +1361,10 @@ async function analyzeImage(b64){
       showScanResult('Error al analizar. Asegúrate de que la carta esté bien iluminada.<br><small style="opacity:.5">'+esc(txt.slice(0,200))+'</small>', false);
     }
   }catch(err){
-    document.getElementById('analyze-overlay').style.display='none';
+    const ov = document.getElementById('analyze-overlay');
+    const st = document.getElementById('analyze-status');
+    if(ov) ov.style.display='none';
+    if(st) st.style.display='none';
     showScanResult('Error de conexión: '+esc(err.message), false);
   }
 }
