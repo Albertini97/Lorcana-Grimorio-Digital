@@ -1,6 +1,5 @@
 export const config = { runtime: 'edge' };
 
-// Parse char-by-char replacing literal newlines inside JSON strings
 function fixJsonNewlines(s) {
   let out = '';
   let inStr = false;
@@ -10,24 +9,19 @@ function fixJsonNewlines(s) {
     if (esc) { out += c; esc = false; continue; }
     if (c === '\\') { esc = true; out += c; continue; }
     if (c === '"') { inStr = !inStr; out += c; continue; }
-    if (inStr && (c === '\n' || c === '\r')) { out += ' '; continue; }
-    if (inStr && c === '\t') { out += ' '; continue; }
+    if (inStr && (c === '\n' || c === '\r' || c === '\t')) { out += ' '; continue; }
     out += c;
   }
   return out;
 }
 
 function extractJson(raw) {
-  // Remove markdown fences
   let s = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
-  // Find first { and last }
   const a = s.indexOf('{');
   const b = s.lastIndexOf('}');
   if (a === -1 || b === -1 || b < a) return null;
   s = s.slice(a, b + 1);
-  // Fix curly quotes
   s = s.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/[\u2013\u2014]/g, '-');
-  // Fix literal newlines inside strings
   s = fixJsonNewlines(s);
   return s;
 }
@@ -58,18 +52,14 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: 'Image too large' }), { status: 413, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
   }
 
-  const prompt = `You are a Disney Lorcana TCG expert. Identify the card in this image and respond with ONLY a JSON object on a single line. No markdown, no newlines inside string values, no explanation.
+  const prompt = `You are a Disney Lorcana TCG expert. Identify the card in this image. Respond ONLY with a single compact JSON object, no markdown, no newlines inside string values.
 
-Required format (replace values with real card data):
-{"found":true,"name":"Gaston","subtitle":"Arrogant Hunter","cost":2,"color":"Ruby","type":"Character","strength":4,"willpower":2,"lore":0,"rarity":"Common","inkwell":false,"set":"Rise of the Floodborn","set_num":"115","abilities":[{"name":"Reckless","text":"This character cannot quest and must challenge each turn if able."}],"flavor_text":"It is not arrogance when you really are the best.","confidence":"high"}
+If card found: {"found":true,"name":"NAME","subtitle":"SUBTITLE or null","cost":N,"color":"COLOR","type":"TYPE","strength":N,"willpower":N,"lore":N,"rarity":"RARITY","inkwell":true,"set":"SET NAME","set_num":"NUM","abilities":[{"name":"NAME","text":"TEXT"}],"flavor_text":"TEXT or null","confidence":"high"}
+If no card: {"found":false,"message":"No card detected"}
 
-Important rules:
-- color must be exactly one of: Amber, Amethyst, Emerald, Ruby, Sapphire, Steel
-- type must be exactly one of: Character, Action, Item, Location  
-- rarity must be exactly one of: Common, Uncommon, Rare, Super Rare, Legendary, Enchanted
-- ALL text inside strings must be on one line, never use actual newline characters inside a string value
-- abilities is an array, each ability has name and text as single-line strings
-- If no Lorcana card is visible respond with: {"found":false,"message":"No card detected"}`;
+color: Amber|Amethyst|Emerald|Ruby|Sapphire|Steel
+type: Character|Action|Item|Location
+rarity: Common|Uncommon|Rare|Super Rare|Legendary|Enchanted`;
 
   const geminiRes = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -81,43 +71,7 @@ Important rules:
           { inline_data: { mime_type: mediaType, data: imageBase64 } },
           { text: prompt }
         ]}],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 800,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'OBJECT',
-            properties: {
-              found: { type: 'BOOLEAN' },
-              name: { type: 'STRING' },
-              subtitle: { type: 'STRING' },
-              cost: { type: 'NUMBER' },
-              color: { type: 'STRING' },
-              type: { type: 'STRING' },
-              strength: { type: 'NUMBER' },
-              willpower: { type: 'NUMBER' },
-              lore: { type: 'NUMBER' },
-              rarity: { type: 'STRING' },
-              inkwell: { type: 'BOOLEAN' },
-              set: { type: 'STRING' },
-              set_num: { type: 'STRING' },
-              abilities: {
-                type: 'ARRAY',
-                items: {
-                  type: 'OBJECT',
-                  properties: {
-                    name: { type: 'STRING' },
-                    text: { type: 'STRING' }
-                  }
-                }
-              },
-              flavor_text: { type: 'STRING' },
-              confidence: { type: 'STRING' },
-              message: { type: 'STRING' }
-            },
-            required: ['found']
-          }
-        }
+        generationConfig: { temperature: 0.1, maxOutputTokens: 800 }
       })
     }
   );
@@ -130,14 +84,18 @@ Important rules:
 
   const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-  // With responseSchema Gemini should return valid JSON, but sanitize anyway
-  const clean = extractJson(raw) || raw.trim();
+  // Always return the raw so client can debug too
+  const clean = extractJson(raw);
 
-  try {
-    JSON.parse(clean);
-  } catch (e) {
-    return new Response(JSON.stringify({ error: 'parse_failed', raw: raw.slice(0, 500) }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+  if (!clean) {
+    return new Response(JSON.stringify({ result: null, raw: raw.slice(0, 1000) }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
   }
 
-  return new Response(JSON.stringify({ result: clean }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+  try {
+    const parsed = JSON.parse(clean);
+    // Return both clean JSON and raw for debugging
+    return new Response(JSON.stringify({ result: clean, raw: raw.slice(0, 200) }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+  } catch (e) {
+    return new Response(JSON.stringify({ result: null, raw: raw.slice(0, 1000), cleaned: clean.slice(0, 500), error: e.message }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+  }
 }

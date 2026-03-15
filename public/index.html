@@ -1359,9 +1359,14 @@ async function analyzeImage(b64){
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Error del servidor');
-    // If server couldn't parse, show raw for debugging
-    if (data.error === 'parse_failed') {
-      showScanResult('<b>La IA respondió pero el formato no es válido.</b><br><br>Respuesta raw:<br>' + esc((data.raw||'').slice(0,400)), false);
+    // Debug: show raw if parse failed or result is null
+    if (!data.result) {
+      const rawText = data.raw || data.cleaned || JSON.stringify(data);
+      showScanResult(
+        '<b style="color:var(--gold)">Debug — respuesta raw de Gemini:</b><br><br>' +
+        '<code style="font-size:11px;word-break:break-all;white-space:pre-wrap">' + esc(rawText.slice(0, 800)) + '</code>',
+        false
+      );
       return;
     }
     const txt = (data.result || '').trim();
